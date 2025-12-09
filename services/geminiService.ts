@@ -75,7 +75,7 @@ export const sendMessageToGemini = async (
       throw new Error("Empty response");
 
     } catch (error: any) {
-      console.warn(Key at index ${retryIdx} failed:, error.message);
+      console.warn(`Key at index ${retryIdx} failed:`, error.message);
       // If quota or permission error, try next key
       if (error.toString().includes("429") || error.toString().includes("403") || error.toString().includes("400")) {
          return tryGenerate(retryIdx + 1);
