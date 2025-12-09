@@ -1,15 +1,14 @@
 
+// Update ChatInterface.tsx - Tambah fitur reset chat
+
 import React, { useState, useRef, useEffect } from 'react';
 import { Message } from '../types';
 import { sendMessageToGemini, ImageAttachment } from '../services/geminiService';
 import { useConfig } from '../contexts/ConfigContext';
-import { DEV_INFO } from '../constants';
 
 const ChatInterface: React.FC = () => {
   const { db, currentUser, saveChatLog, fetchChatLogs } = useConfig();
   
-  // FIX: Black Screen Fallback
-  // Ensure we always have a config object even if currentUser is loading/null
   const globalConfig = db?.globalConfig || { aiName: 'System', aiPersona: '', devName: 'Admin', apiKeys: [], avatarUrl: '' };
   const userConfig = currentUser?.config || {};
 
@@ -36,12 +35,12 @@ const ChatInterface: React.FC = () => {
   const [copiedBlockIndex, setCopiedBlockIndex] = useState<number | null>(null);
   const [isProcessingImages, setIsProcessingImages] = useState(false);
   const [selectedImages, setSelectedImages] = useState<{ file: File; preview: string }[]>([]);
+  const [showResetModal, setShowResetModal] = useState(false);
   
   const chatEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // 1. Fetch History on Mount
   useEffect(() => {
     const loadHistory = async () => {
         if (currentUser) {
@@ -58,17 +57,37 @@ const ChatInterface: React.FC = () => {
         }
     };
     loadHistory();
-  }, [currentUser]); // Dependency on currentUser ensures it runs when user data is ready
+  }, [currentUser]);
 
-  // Scroll to bottom
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, selectedImages]);
 
-  // Syntax highlighting
   useEffect(() => {
     if ((window as any).Prism) setTimeout(() => (window as any).Prism.highlightAll(), 0);
   }, [messages]);
+
+  const handleResetChat = async () => {
+    if (!currentUser) return;
+    
+    try {
+      // Delete all chat logs dari Supabase
+      const { error } = await (await import('../services/supabaseClient')).supabase
+        .from('chat_logs')
+        .delete()
+        .eq('user_id', currentUser.id);
+
+      if (error) throw error;
+
+      // Reset state lokal
+      setMessages([{ role: 'model', text: Connection established. ${config.aiName} System online. Hello, ${currentUser?.username}. }]);
+      setShowResetModal(false);
+      
+    } catch (error) {
+      console.error('Reset failed:', error);
+      alert('Failed to reset chat history');
+    }
+  };
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files.length > 0) {
@@ -114,10 +133,7 @@ const ChatInterface: React.FC = () => {
     if (inputRef.current) inputRef.current.style.height = 'auto';
     setIsLoading(true);
 
-    // Optimistic UI Update
     setMessages(prev => [...prev, { role: 'user', text: currentInput }]);
-    
-    // Save User Message to DB
     saveChatLog('user', currentInput);
 
     try {
@@ -137,8 +153,6 @@ const ChatInterface: React.FC = () => {
       );
 
       setMessages(prev => [...prev, { role: 'model', text: responseText }]);
-      
-      // Save AI Response to DB
       saveChatLog('model', responseText);
 
     } catch (error: any) {
@@ -182,12 +196,24 @@ const ChatInterface: React.FC = () => {
           </div>
         );
       }
-      return <div key={idx} className="whitespace-pre-wrap leading-relaxed" dangerouslySetInnerHTML={{ __html: escapeHtml(part.content).replace(/\\(.?)\\/g, '<strong>$1</strong>').replace(/\(.?)\/g, '<em>$1</em>') }} />;
+      return <div key={idx} className="whitespace-pre-wrap leading-relaxed" dangerouslySetInnerHTML={{ __html: escapeHtml(part.content).replace(/\\(.+?)\\/g, '<strong>$1</strong>').replace(/\(.+?)\/g, '<em>$1</em>') }} />;
     });
   };
 
   return (
     <div className="max-w-4xl mx-auto h-[600px] flex flex-col bg-black/80 backdrop-blur-sm border-2 border-red-900 rounded-lg shadow-[0_0_30px_rgba(139,0,0,0.3)] relative overflow-hidden scanlines">
+      {/* Header dengan tombol reset */}
+      <div className="flex justify-between items-center px-4 py-2 border-b border-red-900/50 bg-black/50">
+        <span className="text-xs font-['Press_Start_2P'] text-red-500">CHAT INTERFACE</span>
+        <button 
+          onClick={() => setShowResetModal(true)}
+          className="text-xs text-gray-400 hover:text-red-500 transition-colors flex items-center gap-2"
+          title="Reset Chat"
+        >
+          <i className="fa-solid fa-trash-can"></i> RESET
+        </button>
+      </div>
+
       <div className="flex-1 overflow-y-auto p-4 space-y-6" id="chatLog">
         {messages.map((msg, idx) => (
           <div key={idx} className={flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}}>
@@ -220,6 +246,32 @@ const ChatInterface: React.FC = () => {
           <button onClick={handleSendMessage} disabled={isLoading || (!input.trim() && selectedImages.length === 0)} className="h-12 w-12 bg-red-800 text-white rounded flex items-center justify-center hover:bg-red-700 disabled:opacity-50"><i className="fa-solid fa-paper-plane"></i></button>
         </div>
       </div>
+
+      {/* Reset Confirmation Modal */}
+      {showResetModal && (
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
+          <div className="bg-gray-900 border-2 border-red-600 rounded p-6 max-w-md w-full">
+            <h3 className="text-xl font-['Press_Start_2P'] text-red-500 mb-4">CONFIRM RESET</h3>
+            <p className="text-gray-300 mb-6 font-['JetBrains_Mono'] text-sm">
+              Yakin mau hapus semua history chat? Tindakan ini tidak bisa dibatalkan.
+            </p>
+            <div className="flex gap-4">
+              <button 
+                onClick={handleResetChat}
+                className="flex-1 bg-red-600 text-white py-3 rounded font-bold hover:bg-red-700"
+              >
+                YA, HAPUS
+              </button>
+              <button 
+                onClick={() => setShowResetModal(false)}
+                className="flex-1 bg-gray-700 text-white py-3 rounded font-bold hover:bg-gray-600"
+              >
+                BATAL
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
