@@ -1,0 +1,30 @@
+
+{
+  "users": [
+    {
+      "id": "admin-001",
+      "username": "dap",
+      "accessKey": "dap32",
+      "role": "admin",
+      "createdAt": "2025-01-01T00:00:00.000Z",
+      "profile": {
+        "fullName": "Administrator",
+        "address": "Localhost",
+        "street": "Admin St",
+        "zipCode": "00000",
+        "country": "System"
+      }
+    }
+  ],
+  "globalConfig": {
+    "aiName": "CentralGPT",
+    "aiPersona": "See constants.ts for full text",
+    "devName": "XdpzQ",
+    "apiKeys": [
+      "AIzaSyDZfAs10Ty1uOEoa-ZTeOBHY-kQwnEuwoI",
+      "AIzaSyB8mdCAG-yLKDQrUnR9LNEdoj2uBQgcpmI",
+      "AIzaSyBzlry9avvn1Gvs0eLhQx15ImNcRihDfyk"
+    ],
+    "avatarUrl": ""
+  }
+}
