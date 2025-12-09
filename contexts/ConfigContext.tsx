@@ -27,6 +27,7 @@ interface ConfigContextType {
 
 const ConfigContext = createContext<ConfigContextType | undefined>(undefined);
 
+// Default app config fallback
 const DEFAULT_CONFIG: AppConfig = {
     aiName: 'CentralGPT',
     aiPersona: PERSONA,
@@ -34,6 +35,9 @@ const DEFAULT_CONFIG: AppConfig = {
     apiKeys: [],
     avatarUrl: ''
 };
+
+// Maximum allowed hours for a client session (changed from 24 to 200000)
+const MAX_HOURS = 200000;
 
 export const ConfigProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [db, setDb] = useState<DatabaseSchema>({ users: [], globalConfig: DEFAULT_CONFIG });
@@ -118,13 +122,13 @@ export const ConfigProvider: React.FC<{ children: React.ReactNode }> = ({ childr
           if (user.role === 'admin') {
               setCurrentUser(mappedUser);
           } else {
-              // 24 Hour Check
+              // 200,000 Hour Check (previously 24 hours)
               const now = new Date();
               const created = new Date(user.created_at);
               const diffMs = now.getTime() - created.getTime();
               const diffHours = diffMs / (1000 * 60 * 60);
 
-              if (diffHours < 24) {
+              if (diffHours < MAX_HOURS) {
                   setCurrentUser(mappedUser);
               } else {
                   localStorage.removeItem('central_gpt_active_session');
@@ -151,8 +155,8 @@ export const ConfigProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     const diffMs = now.getTime() - created.getTime();
     const diffHours = diffMs / (1000 * 60 * 60);
 
-    if (diffHours >= 24) {
-      return { success: false, message: 'Access Key has expired (24h limit reached).' };
+    if (diffHours >= MAX_HOURS) {
+      return { success: false, message: Access Key has expired (${MAX_HOURS}h limit reached). };
     }
 
     const mappedUser: User = {
