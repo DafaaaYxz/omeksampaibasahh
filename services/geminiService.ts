@@ -1,5 +1,5 @@
 
-import { GoogleGenAI } from "@google/genai";
+import { GoogleGenAI, HarmCategory, HarmBlockThreshold } from "@google/genai";
 
 export interface ImageAttachment {
   inlineData: {
@@ -20,35 +20,18 @@ export const sendMessageToGemini = async (
   
   const tryGenerate = async (retryIdx: number): Promise<string> => {
     if (retryIdx >= config.apiKeys.length) {
-      throw new Error("All API keys exhausted. Please update keys in Admin Dashboard.");
+      throw new Error("All API keys exhausted.");
     }
 
     try {
       const apiKey = config.apiKeys[retryIdx];
       const ai = new GoogleGenAI({ apiKey });
 
-      // CRUCIAL: Inject system instruction as first user+model exchange
-      const systemPrompt = [
-        {
-          role: 'user',
-          parts: [{ text: "System initialization. Understand your role." }]
-        },
-        {
-          role: 'model',
-          parts: [{ text: config.systemInstruction }]
-        }
-      ];
+      const formattedContents = history.map(msg => ({
+        role: msg.role,
+        parts: msg.parts
+      }));
 
-      // Format history
-      const formattedContents = [
-        ...systemPrompt,
-        ...history.map(msg => ({
-          role: msg.role,
-          parts: msg.parts
-        }))
-      ];
-
-      // Create current user message parts
       const currentParts: any[] = [];
       
       if (message) {
@@ -70,14 +53,19 @@ export const sendMessageToGemini = async (
         parts: currentParts
       });
 
+      const safetySettings = [
+        { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_NONE },
+        { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_NONE },
+        { category: HarmCategory.HARM_CATEGORY_SEXUALLY_EXPLICIT, threshold: HarmBlockThreshold.BLOCK_NONE },
+        { category: HarmCategory.HARM_CATEGORY_DANGEROUS_CONTENT, threshold: HarmBlockThreshold.BLOCK_NONE },
+      ];
+
       const response = await ai.models.generateContent({
-        model: 'gemini-2.0-flash-exp',
+        model: 'gemini-2.5-flash',
         contents: formattedContents,
         config: {
-          temperature: 1.3,
-          topP: 0.95,
-          topK: 40,
-          maxOutputTokens: 8192,
+          systemInstruction: config.systemInstruction,
+          safetySettings: safetySettings,
         }
       });
 
@@ -88,12 +76,7 @@ export const sendMessageToGemini = async (
       throw new Error("Empty response");
 
     } catch (error: any) {
-      console.warn(`Key at index ${retryIdx} failed:`, error.message);
-      
-      if (error.toString().includes("429") || 
-          error.toString().includes("403") || 
-          error.toString().includes("400") ||
-          error.toString().includes("RESOURCE_EXHAUSTED")) {
+      if (error.toString().includes("429") || error.toString().includes("403")) {
          return tryGenerate(retryIdx + 1);
       }
       throw error;
@@ -101,4 +84,50 @@ export const sendMessageToGemini = async (
   };
 
   return tryGenerate(0);
+};
+
+export const generateVeoVideo = async (
+  prompt: string,
+  config: { apiKeys: string[] }
+): Promise<string> => {
+  const tryGenerateVideo = async (retryIdx: number): Promise<string> => {
+    if (retryIdx >= config.apiKeys.length) {
+      throw new Error("All API keys exhausted.");
+    }
+
+    try {
+      const apiKey = config.apiKeys[retryIdx];
+      const ai = new GoogleGenAI({ apiKey });
+
+      let operation = await ai.models.generateVideos({
+        model: 'veo-3.1-fast-generate-preview',
+        prompt: prompt,
+        config: {
+          numberOfVideos: 1,
+          resolution: '720p',
+          aspectRatio: '16:9'
+        }
+      });
+
+      // Poll for completion
+      while (!operation.done) {
+        await new Promise(resolve => setTimeout(resolve, 5000));
+        operation = await ai.operations.getVideosOperation({operation: operation});
+      }
+
+      const videoUri = operation.response?.generatedVideos?.[0]?.video?.uri;
+      if (!videoUri) throw new Error("Failed to generate video URI");
+      
+      return ${videoUri}&key=${apiKey};
+
+    } catch (error: any) {
+      console.error(error);
+      if (error.toString().includes("429") || error.toString().includes("403")) {
+         return tryGenerateVideo(retryIdx + 1);
+      }
+      throw error;
+    }
+  };
+
+  return tryGenerateVideo(0);
 };
